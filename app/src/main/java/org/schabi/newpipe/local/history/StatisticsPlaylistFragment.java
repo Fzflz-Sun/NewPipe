@@ -39,12 +39,13 @@ import org.schabi.newpipe.util.NavigationHelper;
 import org.schabi.newpipe.util.OnClickGesture;
 import org.schabi.newpipe.util.PlayButtonHelper;
 
+import static org.schabi.newpipe.ktx.ViewUtils.animate;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Supplier;
 
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -95,7 +96,7 @@ public class StatisticsPlaylistFragment
     public View onCreateView(@NonNull final LayoutInflater inflater,
                              @Nullable final ViewGroup container,
                              @Nullable final Bundle savedInstanceState) {
-        return inflater.inflate(R.layout.fragment_playlist, container, false);
+        return inflater.inflate(R.layout.fragment_history, container, false);
     }
 
     @Override
@@ -120,23 +121,19 @@ public class StatisticsPlaylistFragment
     @Override
     protected void initViews(final View rootView, final Bundle savedInstanceState) {
         super.initViews(rootView, savedInstanceState);
+        headerBinding = StatisticPlaylistControlBinding.bind(
+                rootView.findViewById(R.id.history_controls));
+        playlistControlBinding = headerBinding.playlistControl;
         if (!useAsFrontPage) {
             setTitle(getString(R.string.title_last_played));
         }
     }
 
     @Override
-    protected Supplier<View> getListHeaderSupplier() {
-        headerBinding = StatisticPlaylistControlBinding.inflate(activity.getLayoutInflater(),
-                itemsList, false);
-        playlistControlBinding = headerBinding.playlistControl;
-
-        return headerBinding::getRoot;
-    }
-
-    @Override
     protected void initListeners() {
         super.initListeners();
+
+        headerBinding.sortButton.setOnClickListener(view -> toggleSortMode());
 
         itemListAdapter.setSelectedListener(new OnClickGesture<>() {
             @Override
@@ -179,6 +176,34 @@ public class StatisticsPlaylistFragment
         recordManager.getStreamStatistics()
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(getHistoryObserver());
+    }
+
+    @Override
+    public void showEmptyState() {
+        super.showEmptyState();
+        showHistoryControls(false);
+    }
+
+    @Override
+    public void handleError() {
+        super.handleError();
+        showHistoryControls(false);
+    }
+
+    /**
+     * Shows or hides the controls which are pinned above the history list.
+     *
+     * <p>They are only hidden while there is nothing to act on, i.e. while the history is empty or
+     * an error is shown. They are deliberately kept visible while a reload is running, so that
+     * switching the sort mode does not make the whole controls bar flicker and the list jump
+     * around.</p>
+     *
+     * @param show whether the controls should be visible
+     */
+    private void showHistoryControls(final boolean show) {
+        if (headerBinding != null) {
+            animate(headerBinding.getRoot(), show, 150);
+        }
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -259,8 +284,6 @@ public class StatisticsPlaylistFragment
             return;
         }
 
-        playlistControlBinding.getRoot().setVisibility(View.VISIBLE);
-
         itemListAdapter.clearStreamItemList();
 
         if (result.isEmpty()) {
@@ -276,7 +299,8 @@ public class StatisticsPlaylistFragment
 
         PlayButtonHelper.initPlaylistControlClickListener(activity, playlistControlBinding, this);
 
-        headerBinding.sortButton.setOnClickListener(view -> toggleSortMode());
+        playlistControlBinding.getRoot().setVisibility(View.VISIBLE);
+        showHistoryControls(true);
 
         hideLoading();
     }
